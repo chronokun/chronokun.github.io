@@ -8,7 +8,11 @@
 
 <p>If you're used to working with the traditional real-time graphics pipeline then you're probably used to shaders having a relatively small set of texture inputs passed in as uniform variables that are change on a per-object basis while drawing the scene, which of course works out fine when things are all being draw one triangle at a time and need no information about the other parts of the scene. When path tracing however we need to know about all the triangles (or other primitives, in Sunrise they're convex polyhedrons) so that when a ray intersects an object we will have information about the surface color, roughness, metallness, normals, etc. Luckily this turns out to be quite easy to do, though it requires a OpenGL extension to do it the way I have chosen to implement it, specifically <code>GL_ARB_bindless_texture</code>.</p>
 
+<p>Read about it on the OpenGL registry page <a href="https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_bindless_texture.txt">here</a> or the <a href="https://www.khronos.org/opengl/wiki/Bindless_Texture">wiki page</a></p>
+
 <p><code>GL_ARB_bindless_texture</code> gives us bindless texturing which allows us to create texture handles and image handles from textures created with <code>glTextureStorage2D()</code> by using the extension functions <code>glGetTextureHandleARB()</code> to create a texture handle (for accessing the texture through a sampler allowing us to make use of texture filtering) and <code>glGetImageHandleARB()</code> to create an image handle (allowing use of <code>imageLoad()</code>, <code>imageStore()</code>, etc.). After creating the handles we need to use <code>glMakeTextureHandleResidentARB()</code> and <code>glMakeImageHandleResidentARB()</code> to make them resident before using them in our shaders. In our case we actually only need texture handles for the textures used in our scene and only need image handles for our framebuffer or any other images we wish to update from our shaders or read from directly without filtering using <code>imageLoad()</code>.</p>
+
+<p><img src="../images/code0.png" alt="code" title="" /></p>
 
 <p>The SSBOs used in my path tracer look like this in the compute shader:</p>
 
