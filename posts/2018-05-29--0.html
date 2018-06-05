@@ -1,55 +1,139 @@
-<h2>Adding texturing to a glsl path tracer</h2>
-
+<html><head><link rel="stylesheet" href="../style.css"></head>
+<body>
+<div class="page">
+<h2>2018-05-29 - Adding texturing to a glsl path tracer</h2>
 <a href="../index.html">Top</a>
-
 <p>So, since I haven't seen any other writeups covering the subject of adding texturing to an OpenGL ray-tracer/path-tracer (they all seem to stop just short of that step, or go into procedural texturing) I figured I might as well blog about the approach I used for the path-traced viewmode in Sunrise (my work-in-progress brush based map editor, video <a href="https://www.youtube.com/watch?v=IA0WcpM_qX8">here</a>).</p>
-
 <p><img src="../images/sunrise1.jpg" alt="sunrise" title="" /></p>
-
 <p>If you're used to working with the traditional real-time graphics pipeline then you're probably used to shaders having a relatively small set of texture inputs passed in as uniform variables that are change on a per-object basis while drawing the scene, which of course works out fine when things are all being draw one triangle at a time and need no information about the other parts of the scene. When path tracing however we need to know about all the triangles (or other primitives, in Sunrise they're convex polyhedrons) so that when a ray intersects an object we will have information about the surface color, roughness, metallness, normals, etc. Luckily this turns out to be quite easy to do, though it requires a OpenGL extension to do it the way I have chosen to implement it, specifically <code>GL_ARB_bindless_texture</code>.</p>
-
 <p>Read about it on the OpenGL registry page <a href="https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_bindless_texture.txt">here</a> or the <a href="https://www.khronos.org/opengl/wiki/Bindless_Texture">wiki page</a></p>
-
 <p><code>GL_ARB_bindless_texture</code> gives us bindless texturing which allows us to create texture handles and image handles from textures created with <code>glTextureStorage2D()</code> by using the extension functions <code>glGetTextureHandleARB()</code> to create a texture handle (for accessing the texture through a sampler allowing us to make use of texture filtering) and <code>glGetImageHandleARB()</code> to create an image handle (allowing use of <code>imageLoad()</code>, <code>imageStore()</code>, etc.). After creating the handles we need to use <code>glMakeTextureHandleResidentARB()</code> and <code>glMakeImageHandleResidentARB()</code> to make them resident before using them in our shaders. In our case we actually only need texture handles for the textures used in our scene and only need image handles for our framebuffer or any other images we wish to update from our shaders or read from directly without filtering using <code>imageLoad()</code>.</p>
-
-<p><img src="../images/code0.png" alt="code" title="" /></p>
-
+<pre>
+GLsizei levels = (GLsizei)floor(log2(dMax(pTexture-&gt;width, pTexture-&gt;height)));
+glTextureStorage2D(texname, levels, GL_RGB8, pTexture-&gt;width, pTexture-&gt;height);
+glTextureSubImage2D(texname, 0, 0, 0, pTexture->width, pTexture-&gt;height, input_format, GL_UNSIGNED_BYTE, pTexture-&gt;pImageData);
+glTextureParameteri(texname, GL_TEXTURE_WRAP_S, GL_REPEAT);
+glTextureParameteri(texname, GL_TEXTURE_WRAP_T, GL_REPEAT);
+glTextureParameteri(texname, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+glTextureParameteri(texname, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+float anisoLargest;
+glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &amp;anisoLargest);
+glTextureParameterf(texname, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisoLargest);
+glGenerateTextureMipmap(texname);
+//
+glBindTexture(GL_TEXTURE_2D, 0);
+//
+pTexture->texture = texname;
+// Bindless stuff
+pTexture->textureHandle = glGetTextureHandleARB(pTexture-&gt;texture);
+pTexture->imageHandle = glGetImageHandleARB(pTexture-&gt;texture, 0, GL_FALSE, 0, GL_RGBA8);
+glMakeTextureHandleResidentARB(pTexture-&gt;textureHandle);
+glMakeImageHandleResidentARB(pTexture-&gt;imageHandle, GL_READ_ONLY);
+</pre>
 <p>The SSBOs used in my path tracer look like this in the compute shader:</p>
-
-<p><img src="../images/code1.png" alt="code" title="" /></p>
-
+<pre>
+// shader storage
+layout(std430, binding = 0) buffer plane_buffer
+{
+	plane planes[];
+};
+layout(std140, binding = 1) buffer brush_buffer
+{
+	brush brushes[];
+};
+layout(std140, binding = 2) buffer node_buffer
+{
+	node nodes[];
+};
+</pre>
 <p>where plane is defined as:</p>
-
-<p><img src="../images/code2.png" alt="code" title="" /></p>
-
+<pre>
+struct plane {
+	vec3 normal;
+	float distance;
+	vec3 tangent;
+	vec3 bitangent;
+	vec3 origin;
+	sampler2D colormap;
+	sampler2D normalmap;
+	sampler2D metalmap;
+	sampler2D roughmap;
+};
+</pre>
 <p>and on the C side of things is defined as:</p>
-
-<p><img src="../images/code3.png" alt="code" title="" /></p>
-
+<pre>
+struct PathTracerPlane
+{
+	struct Vec3f normal;
+	float distance;
+	struct Vec3f tangent;
+	float pad0;
+	struct Vec3f bitangent;
+	float pad1;
+	struct Vec3f origin;
+	float pad2;
+	u64 basecolorTexture;
+	u64 normalTextue;
+	u64 metallicTexture;
+	u64 roughnessTexture;
+};
+</pre>
 <p>where <code>u64</code> is: </p>
-
-<p><img src="../images/code4.png" alt="code" title="" /></p>
-
+<pre>
+typedef uint64_t u64;
+</pre>
 <p>and <code>Vec3f</code> is:</p>
-
-<p><img src="../images/code5.png" alt="code" title="" /></p>
-
+<pre>
+struct Vec3f
+{
+	float v[3];
+};
+</pre>
 <p>and is loaded as follows:</p>
-
-<p><img src="../images/code6.png" alt="code" title="" /></p>
-
+<pre>
+void RendererUpdatePathTracer(struct PathTracerData* pTracerData)
+{
+	for(mindex i = 0; i &lt; pTracerData->nPlanes; i++) {
+		pTracerData->pPlanes[i].basecolorTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].basecolorTexture);
+		pTracerData->pPlanes[i].normalTextue = GetTextureHandleFromID(pTracerData->pPlanes[i].normalTextue);
+		pTracerData->pPlanes[i].metallicTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].metallicTexture);
+		pTracerData->pPlanes[i].roughnessTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].roughnessTexture);
+	}
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[0]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerPlane)*pTracerData->nPlanes, pTracerData-&gt;pPlanes, GL_STATIC_DRAW);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[1]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerBrush)*pTracerData->nBrushes, pTracerData-&gt;pBrushes, GL_STATIC_DRAW);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[2]);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerNode)*pTracerData->nNodes, pTracerData-&gt;pNodes, GL_STATIC_DRAW);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	r_rendererData.pathTracerRootNode = (u32)pTracerData->rootNode;
+}
+</pre>
 <p>when my <code>traceRay()</code> function inside my compute shader returns a hit, with texcoords calculated by calling:</p>
-
-<p><img src="../images/code7.png" alt="code" title="" /></p>
-
+<pre>
+bestHit.texcoord = calcTexCoords(	bestHit.position,
+					planes[bestHit.planeIndex].origin,
+					planes[bestHit.planeIndex].tangent,
+					planes[bestHit.planeIndex].bitangent);
+</pre>
 <p>which is defined as:</p>
-
-<p><img src="../images/code8.png" alt="code" title="" /></p>
-
+<pre>
+vec2 calcTexCoords(vec3 position, vec3 origin, vec3 tangent, vec3 bitangent)
+{
+	vec2 tcBase = vec2(dot(tangent, origin), dot(bitangent, origin));
+	vec2 tcPosition = vec2(dot(tangent, position), dot(bitangent, position)) - tcBase;
+	return tcPosition/128.;
+}
+</pre>
 <p>I simply sample the textures as follows:</p>
-
-<p><img src="../images/code9.png" alt="code" title="" /></p>
-
+<pre>
+vec3 surfColor = texture(planes[hit.planeIndex].colormap, hit.texcoord).rgb;
+vec3 surfNormal = (texture(planes[hit.planeIndex].normalmap, hit.texcoord).xyz * 2.) - vec3(1.);
+mat3 toWorld = mat3(planes[hit.planeIndex].tangent, planes[hit.planeIndex].bitangent, planes[hit.planeIndex].normal);
+surfNormal = toWorld * surfNormal;
+float surfRough = texture(planes[hit.planeIndex].roughmap, hit.texcoord).x;
+float surfMetal = texture(planes[hit.planeIndex].metalmap, hit.texcoord).x;
+</pre>
 <p>If you wished to implement texturing without use of bindless texturing some alternatives you could look at are:</P>
 <ul>
 <li>Texture atlasing</li>
@@ -58,3 +142,6 @@
 <li>Moving to Direct3D 12 or Vulkan*</li>
 </ul>
 <p>* currently I am in the process of porting Sunrise's backend renderer to Vulkan so I'll likely write another post about this at some point in the future.</p>
+</div>
+</body>
+</html>
