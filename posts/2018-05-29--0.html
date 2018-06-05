@@ -11,7 +11,8 @@
 <pre>
 GLsizei levels = (GLsizei)floor(log2(dMax(pTexture-&gt;width, pTexture-&gt;height)));
 glTextureStorage2D(texname, levels, GL_RGB8, pTexture-&gt;width, pTexture-&gt;height);
-glTextureSubImage2D(texname, 0, 0, 0, pTexture->width, pTexture-&gt;height, input_format, GL_UNSIGNED_BYTE, pTexture-&gt;pImageData);
+glTextureSubImage2D(	texname, 0, 0, 0, pTexture->width, pTexture-&gt;height, input_format, 
+			GL_UNSIGNED_BYTE, pTexture-&gt;pImageData);
 glTextureParameteri(texname, GL_TEXTURE_WRAP_S, GL_REPEAT);
 glTextureParameteri(texname, GL_TEXTURE_WRAP_T, GL_REPEAT);
 glTextureParameteri(texname, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -94,17 +95,24 @@ struct Vec3f
 void RendererUpdatePathTracer(struct PathTracerData* pTracerData)
 {
 	for(mindex i = 0; i &lt; pTracerData->nPlanes; i++) {
-		pTracerData->pPlanes[i].basecolorTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].basecolorTexture);
-		pTracerData->pPlanes[i].normalTextue = GetTextureHandleFromID(pTracerData->pPlanes[i].normalTextue);
-		pTracerData->pPlanes[i].metallicTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].metallicTexture);
-		pTracerData->pPlanes[i].roughnessTexture = GetTextureHandleFromID(pTracerData->pPlanes[i].roughnessTexture);
+		pTracerData->pPlanes[i].basecolorTexture
+			= GetTextureHandleFromID(pTracerData->pPlanes[i].basecolorTexture);
+		pTracerData->pPlanes[i].normalTextue
+			= GetTextureHandleFromID(pTracerData->pPlanes[i].normalTextue);
+		pTracerData->pPlanes[i].metallicTexture
+			= GetTextureHandleFromID(pTracerData->pPlanes[i].metallicTexture);
+		pTracerData->pPlanes[i].roughnessTexture
+			= GetTextureHandleFromID(pTracerData->pPlanes[i].roughnessTexture);
 	}
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[0]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerPlane)*pTracerData->nPlanes, pTracerData-&gt;pPlanes, GL_STATIC_DRAW);
+	glBufferData(	GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerPlane)*pTracerData->nPlanes, 
+			pTracerData-&gt;pPlanes, GL_STATIC_DRAW);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[1]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerBrush)*pTracerData->nBrushes, pTracerData-&gt;pBrushes, GL_STATIC_DRAW);
+	glBufferData(	GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerBrush)*pTracerData->nBrushes,
+			pTracerData-&gt;pBrushes, GL_STATIC_DRAW);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, r_rendererData.pathTracerSSBO[2]);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerNode)*pTracerData->nNodes, pTracerData-&gt;pNodes, GL_STATIC_DRAW);
+	glBufferData(	GL_SHADER_STORAGE_BUFFER, sizeof(struct PathTracerNode)*pTracerData->nNodes, 
+			pTracerData-&gt;pNodes, GL_STATIC_DRAW);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	r_rendererData.pathTracerRootNode = (u32)pTracerData->rootNode;
 }
@@ -129,7 +137,9 @@ vec2 calcTexCoords(vec3 position, vec3 origin, vec3 tangent, vec3 bitangent)
 <pre>
 vec3 surfColor = texture(planes[hit.planeIndex].colormap, hit.texcoord).rgb;
 vec3 surfNormal = (texture(planes[hit.planeIndex].normalmap, hit.texcoord).xyz * 2.) - vec3(1.);
-mat3 toWorld = mat3(planes[hit.planeIndex].tangent, planes[hit.planeIndex].bitangent, planes[hit.planeIndex].normal);
+mat3 toWorld = mat3(	planes[hit.planeIndex].tangent,
+			planes[hit.planeIndex].bitangent,
+			planes[hit.planeIndex].normal);
 surfNormal = toWorld * surfNormal;
 float surfRough = texture(planes[hit.planeIndex].roughmap, hit.texcoord).x;
 float surfMetal = texture(planes[hit.planeIndex].metalmap, hit.texcoord).x;
