@@ -1,0 +1,467 @@
+<html><head><link rel="stylesheet" href="../style.css"></head>
+<body>
+<div class="page">
+<h2>2018-06-26 - Making sense of DOOM's .bmodel file format</h2>
+<a href="../index.html">Top</a>
+<p>
+Recently I set out to build a map viewer for DOOM (2016) and as many of the file formats involved are proprietary formats unique to idTech6 I thought it would be a good idea to document whatever I can figure out about them as I go to avoid as much duplicated effort as possibly for anyone else attempting something similar in future.
+</p>
+<center><img src="../images/bfg_division1.jpg" alt="sunrise" title="" /></center>
+<p>
+The first step was to extract the files from the .resource files that idTech6 uses to package it's data, for this I used an existing open source tool called DOOMExtract (available on GitHub <a href="https://github.com/emoose/DOOMExtract">here</a>). After taking a look at the files inside I immediately noticed some similarities to early idTech games such as Doom 3, such as the existance of <code>.proc</code> files which Doom 3 used for 'pre-processed map geometry'.
+</p>
+<p>From the Doom 3 SDK documentation on idDevNet <a href="https://www.iddevnet.com/doom3/maps.php">here</a>:
+<pre>
+.proc
+The .proc contains all the pre-processed geometry in the map.It stores all the visible 
+triangles, batched up in to surfaces. It also stores all the portal information, and any 
+precalculated shadow volumes (if a light doesn't move, and a brush doesn't move, the shadow 
+volume can be precalculated).
+</pre>
+</p>
+<p>
+After a quick look inside one of the <code>.proc</code> files it seemed that they no longer contain the level geometry used for rendering and instead reference binary model files:
+<pre>
+binaryModels { /* numBinaryModels = */ 1
+world 1
+}
+</pre>
+</p>
+<p>
+Inside each map folder there's a subfolder called <code>_combo</code>, eg. <code>maps/game/sp/intro/intro/_combo/</code>. In this folder there is several files, one of which is a <code>.proc</code> file named after the map, eg. <code>intro.proc</code>, some others that commonly show up are:
+</p>
+<pre>
+_world.bmodel;model
+_world.shadows
+_world.tome
+sky.bmodel;model
+world.bcm;cm
+</pre>
+<p>
+You can probably take an educated guess as to what some of these files are for, <code>sky.bmodel</code> is probably some kind of sky box or something, <code>world.bcm</code> is likely a binary version of Doom 3's earlier <code>.cm</code> collision model format made, <code>_world.shadows</code> is surely <i>something</i> to do with shadows, though I don't know what, and I don't yet know what <code>_world.tome</code> is for, which just leaves <code>_world.bmodel</code> logically being our binary model referenced by our <code>.proc</code> file.
+</p>
+<p>(I think the <code>;model</code> and <code>;cm</code> parts of the file name are tags and not part of the original file names, of course, I could be wrong.)</p>
+<p>
+Each of our <code>_world.bmodel</code> files in each map seem to be in the order of roughly 200-400MB, and the larger maps in the game are split into two of three sub-maps, each with <code>_world.bmodel</code> files in that size range. Multiplayer maps, classic maps, snap maps and challenge maps are of course all smaller.
+The <code>.bmodel</code> format is also used for other static models in the game, though nearly all level geometry that isn't moveable(doors, elevators, etc.) is merged into the <code>_world.bmodel</code> file, and other uses seem to have slight differences when compared to the world model files which I'll mention more about later.
+</p>
+<p>So what does a <code>.bmodel</code> file look like inside anyway?</p>
+<p>
+One of the first noticeable things after comparing several files in a hex editor is that these files start with a magic number, specifically: <code>1B 4C 4D 42</code>. This magic number also appears in several other places in the file such as in the header for each record/mesh and as part of an epilogue/footer at the end of some files.
+</p>
+<p>Following the magic number is a 4-byte value which I haven't yet figured out, however it is where the world models and other models(item pickups, etc.) start to differ, in world models this number seems to always be: <code>00 00 00 00</code>, it's worth taking note of whether or not this value is zero because it allows us to determine if a model is a world model which will be important to interpreting some of the later data. This value seems to be different in each non-world model file but as far as I can tell it's value is too large to correspond to any size or offset within the file, and due to it being significantly different in each file it seems unlikely to be a set of flags. It's likely that this value might be some kind of checksum however I haven't yet tried testing different checksum algorithms on different parts of the file to see if any of them match so until I find any further evidence I can only speculate what it's purpose is.
+</p>
+<p>
+The next 4 bytes (<code>0x8 <-> 0xB</code>), are a big-endian encoded count of the number of meshes/records contained within the file, in many of the smaller files this value will be one, or in slightly larger models might be in the tens, or in the case of the world models will likely be in the thousands. I guess it's probably just an inherited legacy of earlier formats that big-endian encoding is used here since as far as I know none of the platforms DOOM ships on use big-endian CPUs.
+</p>
+<p>
+Immediately after the count of records follows the records themselves, so our complete file header looks like this:
+</p>
+<pre>
+1B 4C 4D 42 - Magic number
+XX XX XX XX - Possibly a checksum? but 00 00 00 00 for world models.
+YY YY YY YY - Big-endian encoded count of the number of records/meshes in the file.
+</pre>
+<p>
+Now on to the records contained within, each representing a mesh in the file. The first part of the record format is a magic number, the same one we've seen previously, <code>1B 4C 4D 42</code>, however this is omitted from the first record in the file. The next part is a string, strings are encoded as a 4-byte little-endian length prefix, followed by ASCII text, with no null-byte at the end, 4+N bytes total. These are the only little-endian numbers I've seen so far in <code>.bmodel</code> files, and it's strange to see different endiannesses alongside eachother in the same file, but that just seems to be how it is.
+</p>
+<p>
+The next twelve bytes (which are likely three 4-bytes values) are still somewhat mysterious to me, the first looks as though it could be some kind of checksum, or perhaps a handle value referencing something, but it's typical values suggest it's not an index or size, and the way in which it changes suggest it's not a set of flags. It seems to have completely different values in each file, but within a file many records will share the same value and yet not all records, they appear to be somehow grouped. The 4 byte value following that (the second in this set of three) appears to be either <code>00 00 00 00</code> for world models, or <code>FF FF FF FF</code> for non-world models, so it likely relates to some distinction between the (eg. perhaps whether or not the model uses backed lightmaps or something). The third and final 4 byte value of this triplet appears to be a set of flags as it is usually zero, but occasionally will contain some nice round number like <code>00 00 00 06</code> or <code>00 00 00 08</code>. Perhaps these flags might determine whether a surface is transparent or requires special shading or other such things, but I haven't yet looked into what each value might be so this is pure speculation.
+</p>
+<p>Put together these three values are:</p>
+<pre>
+QQ QQ QQ QQ - unknown, possibly checksum or group handle of some kind.
+RR RR RR RR - 0 for world models, -1 for non-world models, or some distinction between the two.
+SS SS SS SS - probably flags.
+</pre>
+<p>
+The next set of bytes have a clearer meaning, a 4-byte big-endian encoded count of the number of additional texture strings in this record header, after that is however many strings were specified by this count, encoded as before using little-endian length prefixes.
+<p>
+<pre>
+NN NN NN NN - number of additional texture strings.
+[N Strings] - the strings, little-endian, length prefixed.
+</pre>
+<p>
+After that we have two 4-byte values, the number of vertices in the mesh, followed by the number of indices in the mesh.
+</p>
+<pre>
+VV VV VV VV - vertex count, big endian.
+II II II II - index count, big endian.
+</pre>
+<p>Up next we have a big chunk of 44-bytes (probably 11 4 byte values)</p>
+<pre>
+00 01 80 1F - maybe some new magic number or something? maybe not? but never seems to change.
+3F 80 00 00 - 1.0f scale maybe?
+3F 80 00 00 - 1.0f
+3F 80 00 00 - 1.0f
+00 00 00 00 - 0.0f and offset? or origin?
+00 00 00 00 - 0.0f
+00 00 00 00 - 0.0f
+3F 80 00 00 - 1.0f and same for textures?
+3F 80 00 00 - 1.0f
+00 00 00 00 - 0.0f
+00 00 00 00 - 0.0f
+</pre>
+<p>Until I see any evidence that these values ever actually change, I guess I can probably just ignore them anyway?</p>
+<p>
+Next up we have the vertices, followed by the indices, to know where each starts and finishes we need to know how big they are though.
+</p>
+<center><img src="../images/renderdoc.png" alt="RenderDoc" title="" /></center>
+<p>Thanks RenderDoc!</p>
+<p>
+Luckily for us <code>.bmodel</code> seems to keep things simple by storing vertices in the same format (other than the fact that the floats are big-endian in the file) in which they're used for rendering. If you look at the files in a hex editor the repeating patterns are also a pretty good give away that the vertex stride is indeed 48 bytes thanks to some of the values (particularly the 'color' value) being quite consistent. I haven't yet figured out what all the values in the vertex format are used for, but the basic structure I'm using to interpret it is this:
+</p>
+<pre>
+struct Vertex
+{
+	float position[3];
+	float texcoord[2];
+	uint8_t normal[4];
+	uint8_t tangent[4];
+	uint8_t color[4];
+	float texcoord2[2];
+	uint8_t unk0[4];
+	uint8_t unk1[4];
+};
+</pre>
+<p>
+The meaning of <code>position</code>, <code>normal</code> & <code>tangent</code> are exactly what you'd expect, as for <code>color</code>, I named it that based on that seeming to be what id Software has called it, but as far as I can tell it's not actually color, afterall, why would a megatextured game need vertex tinting anyway? In the Doom 3 source code they use <code>color</code> and <code>color2</code> as names for the bone weight values used for skinning stored inside each <code>idDrawVert</code> so perhaps this is something similar, though I thought this was a static mesh format so I'm not sure what use they'd be here, and <code>color</code> does seem to sometimes have different values, though it's mostly set to <code>FF FF FF FF</code>. As for <code>texcoord2</code>, my best guess is that this is the texture coordinates for lightmaps since it would make sense to have a separate value for that as it's often useful to lay lightmaps out with more uniform texel density as these coordinates seem to be. It's also worth noting that the <code>texcoord2</code> values extend well beyond the 0 to 1 range where as the <code>texcoord</code> values seem to spread that 0->1 unit square of texture coordinates accross the entire level(with the exception of non-megatextured surfaces, such as glass), so prehaps the lightmaps are still using more of a texture atlassing type of scheme and that is being reflected in the texcoord ranges. As for <code>unk0</code> and <code>unk1</code>, I haven't yet figured out the meanings of these values so I've just left them labelled as unknown for now (though <code>unk0[0]</code> seems to a mask denoting which vertexes are not utilizing megatextures, eg. glass, flames, skyboxes, etc.).
+</p>
+<center><img src="../images/texcoord_comparison2.jpg" alt="texcoord comparison" title="" /></center>
+<p>Above: Visualization of texture coordinates, on the left is texcoord, on the right is texcoord2.</p>
+<p>The indices follow immediately after the end of the vertices, 2-bytes per index, big-endian once again.</p>
+<p>After the indices is some extra data about the mesh, 28-bytes worth, big-endian<p>
+<pre>
+XX XX XX XX - Bounding box minimum X value, floating point, big endian.
+YY YY YY YY - Bounding box minimum Y value, floating point, big endian.
+ZZ ZZ ZZ ZZ - Bounding box minimum Z value, floating point, big endian.
+XX XX XX XX - Bounding box maximum X value, floating point, big endian.
+YY YY YY YY - Bounding box maximum Y value, floating point, big endian.
+ZZ ZZ ZZ ZZ - Bounding box maximum Z value, floating point, big endian.
+?? ?? ?? ?? - dunno yet, very often equal to the index count, but sometimes it's not ???
+</pre>
+<p>... and that's the end of the record/mesh.</p>
+<p>
+At this point I think we've pretty much got all the data out of the file which we really care about, however there is still a footer/epilogue. It's format will be slightly different depending on whether we're dealing with a world model or not, but either way it starts with the magic number <code>1B 4C 4D 42</code>. Next up is a 4-byte, big-endian count of the number of meshes/materials, this value will be zero if we're dealing with a world model, otherwise it will match our previous record count. Following this value will be the following structure repeated as many times as specified by the record count that preceded it:
+</p>
+<pre>
+[Little-endian length prefixed string, 4+N bytes] - texture filename
+00 00 00 00 - unknown, always seems to be zero.
+00 00 00 00 - unknown, always seems to be zero.
+VV VV VV VV - vertex count minus one of corresponding mesh, big endian.
+</pre>
+<p>At this point you should have reached the end of the file =)</p>
+<p>Putting it all together the file is something like:</p>
+<pre>
+[header]
+	[magic]
+	[unknown, maybe checksum]
+	[numrecords]
+[N records...
+	-[magic, not present in first record]-
+	[texture string]
+	[unk0, maybe group handle or hash or checksum of something]
+	[unk1, 0: world mode or -1: non-world model]
+	[unk2, probably flags]
+	[number of additional texture strings]
+		...[N additional texture strings]
+	[vertex count]
+	[index count]
+	[44 bytes of stuff that seems to always be the same]
+	[N vertices...
+		[position, vec3]
+		[texcoord, vec2]
+		[normal, uint8_t*4]
+		[tangent, uint8_t*4]
+		['color', probably not really color, uint8_t*4]
+		[texcoord2, vec2]
+		[unk0, first byte is probably megatexture usage mask, uint8_t*4]
+		[unk1, uint8_t*4]]
+	[N indices...
+		[GL_UNSIGNED_SHORT]]
+	[bounding box]
+	[4 bytes of unknown purpose, often matches index count, sometimes doesn't]
+[epilogue]
+	[magic]
+	[numrecords]
+		...[
+		[string]
+		[unk0, 4 bytes]
+		[unk1, 4 bytes]
+		[numverts-1, 4 bytes]]
+</pre>
+<p>and here's some example C++ code to load it:</p>
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+#include &lt;cstdio&gt;
+#include &lt;cassert&gt;
+#include &lt;cstdlib&gt;
+#include &lt;intrin.h&gt;
+#include &lt;vector&gt;
+
+struct Vertex
+{
+	float position[3];
+	float texcoord[2];
+	uint8_t normal[4];
+	uint8_t tangent[4];
+	uint8_t color[4];
+	float texcoord2[2];
+	uint8_t unk0[4];
+	uint8_t unk1[4];
+};
+
+uint32_t doString(FILE* pFile)
+{
+	int32_t nString;
+	size_t result;
+	result = fread_s(&nString, sizeof(nString), 1, 4, pFile);
+	assert(result == 4);
+	assert(nString &lt; 256);
+	//
+	char string[256];
+	memset(string, 0, sizeof(string));
+	result = fread_s(string, 255, 1, nString, pFile);
+	assert(result == nString);
+	return nString;
+}
+
+bool doRecord(FILE* pFile, bool expectMagic, uint32_t* pVertexCounter, bool isWorldModel)
+{
+	size_t result;
+	uint32_t tmp;
+	const uint32_t kMagic = 0x424D4C1b;
+	if(expectMagic) {
+		result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+		assert(result == 4);
+		assert(tmp == kMagic);
+	}
+	doString(pFile);
+	//
+	uint32_t headerUnk[3];
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	headerUnk[0] = tmp;
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	headerUnk[1] = tmp;
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	headerUnk[2] = tmp; // probably flags
+	if(isWorldModel) {
+		assert(headerUnk[1] == 0);
+	} else {
+		assert(headerUnk[1] == 0xFFFFFFFF);
+	}
+	//
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	int32_t nAdditional = _byteswap_ulong(tmp);
+	//
+	for(int32_t i = 0; i &lt; nAdditional; i++) {
+		doString(pFile);
+	}
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	uint32_t nVertices = _byteswap_ulong(tmp);
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	uint32_t nIndices = _byteswap_ulong(tmp);
+	//
+	uint32_t unk[11];
+	uint32_t unk_be[11];
+	float unk_fl[11];
+	uint8_t unk_bytes[11][4];
+	result = fread_s(unk, sizeof(unk), 1, sizeof(unk), pFile);
+	assert(result == sizeof(unk));
+	for(uint32_t i = 0; i &lt; 11; i++) {
+		uint32_t t0 = unk[i];
+		uint32_t t1 = _byteswap_ulong(t0);
+		unk_be[i] = t1;
+		unk_fl[i] = *(float*)&t1;
+		unk_bytes[i][0] = ((uint8_t*)&unk[i])[0];
+		unk_bytes[i][1] = ((uint8_t*)&unk[i])[1];
+		unk_bytes[i][2] = ((uint8_t*)&unk[i])[2];
+		unk_bytes[i][3] = ((uint8_t*)&unk[i])[3];
+	}
+	assert(unk[0] == 0x1F800100);
+	assert(unk_fl[1] == 1.f);
+	assert(unk_fl[2] == 1.f);
+	assert(unk_fl[3] == 1.f);
+	assert(unk_fl[4] == 0.f);
+	assert(unk_fl[5] == 0.f);
+	assert(unk_fl[6] == 0.f);
+	assert(unk_fl[7] == 1.f);
+	assert(unk_fl[8] == 1.f);
+	assert(unk_fl[9] == 0.f);
+	assert(unk_fl[10] == 0.f);
+	//
+	for(uint32_t i = 0; i &lt; nVertices; i++) {
+		uint32_t buffer[12];
+		result = fread_s(buffer, sizeof(buffer), 1, sizeof(buffer), pFile);
+		assert(result == sizeof(buffer));
+		float f[12];
+		for(uint32_t j = 0; j &lt; 12; j++) {
+			uint32_t t0 = buffer[j];
+			uint32_t t1 = _byteswap_ulong(t0);
+			f[j] = *(float*)&t1;
+		}
+		Vertex v;
+		v.position[0] = f[0];
+		v.position[1] = f[1];
+		v.position[2] = f[2];
+		//
+		v.texcoord[0] = f[3];
+		v.texcoord[1] = f[4];
+		//
+		v.normal[0] = ((uint8_t*)&buffer[5])[0];
+		v.normal[1] = ((uint8_t*)&buffer[5])[1];
+		v.normal[2] = ((uint8_t*)&buffer[5])[2];
+		v.normal[3] = ((uint8_t*)&buffer[5])[3];
+		//
+		v.tangent[0] = ((uint8_t*)&buffer[6])[0];
+		v.tangent[1] = ((uint8_t*)&buffer[6])[1];
+		v.tangent[2] = ((uint8_t*)&buffer[6])[2];
+		v.tangent[3] = ((uint8_t*)&buffer[6])[3];
+		//
+		v.color[0] = ((uint8_t*)&buffer[7])[0];
+		v.color[1] = ((uint8_t*)&buffer[7])[1];
+		v.color[2] = ((uint8_t*)&buffer[7])[2];
+		v.color[3] = ((uint8_t*)&buffer[7])[3];
+		//
+		v.texcoord2[0] = f[8];
+		v.texcoord2[1] = f[9];
+		//
+		v.unk0[0] = ((uint8_t*)&buffer[10])[0]; // Mask for megatexturing?
+		v.unk0[1] = ((uint8_t*)&buffer[10])[1]; // ???
+		v.unk0[2] = ((uint8_t*)&buffer[10])[2]; // ??? Blank?
+		v.unk0[3] = ((uint8_t*)&buffer[10])[3];
+		//
+		v.unk1[0] = ((uint8_t*)&buffer[11])[0];
+		v.unk1[1] = ((uint8_t*)&buffer[11])[1];
+		v.unk1[2] = ((uint8_t*)&buffer[11])[2];
+		v.unk1[3] = ((uint8_t*)&buffer[11])[3];
+	}
+	//
+	*pVertexCounter += nVertices;
+	//
+	for(uint32_t i = 0; i &lt; nIndices; i++) {
+		uint16_t tmp1;
+		result = fread_s(&tmp1, sizeof(tmp1), 1, sizeof(tmp1), pFile);
+		assert(result == sizeof(tmp1));
+		uint16_t index = _byteswap_ushort(tmp1);
+	}
+	//
+	uint32_t unk2[7];
+	uint32_t unk2_be[7];
+	float unk2_fl[7];
+	uint8_t unk2_bytes[7][4];
+	result = fread_s(unk2, sizeof(unk2), 1, sizeof(unk2), pFile);
+	assert(result == sizeof(unk2));
+	for(uint32_t i = 0; i &lt; 7; i++) {
+		uint32_t t0 = unk2[i];
+		uint32_t t1 = _byteswap_ulong(t0);
+		unk2_be[i] = t1;
+		unk2_fl[i] = *(float*)&t1;
+		unk2_bytes[i][0] = ((uint8_t*)&unk2[i])[0];
+		unk2_bytes[i][1] = ((uint8_t*)&unk2[i])[1];
+		unk2_bytes[i][2] = ((uint8_t*)&unk2[i])[2];
+		unk2_bytes[i][3] = ((uint8_t*)&unk2[i])[3];
+	}
+	float minBound[3];
+	float maxBound[3];
+	minBound[0] = unk2_fl[0];
+	minBound[1] = unk2_fl[1];
+	minBound[2] = unk2_fl[2];
+	maxBound[0] = unk2_fl[3];
+	maxBound[1] = unk2_fl[4];
+	maxBound[2] = unk2_fl[5];
+	assert(minBound[0] &lt;= maxBound[0]);
+	assert(minBound[1] &lt;= maxBound[1]);
+	assert(minBound[2] &lt;= maxBound[2]);
+	//
+	unk2_be[6]; // ??? often unk2_be[6] == nIndices, but not always
+	//
+	return true;
+}
+
+void doFooter(FILE* pFile, uint32_t nRecords, uint32_t* pVertexCounters)
+{
+	size_t result;
+	uint32_t tmp;
+	const uint32_t kMagic = 0x424D4C1b;
+	//
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	assert(tmp == kMagic);
+	//
+	result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+	assert(result == 4);
+	assert(_byteswap_ulong(tmp) == nRecords);
+	//
+	for(uint32_t i = 0; i &lt; nRecords; i++) {
+		doString(pFile);
+		//
+		result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+		assert(result == 4);
+		uint32_t unk0 = tmp;
+		uint32_t unk0_be = _byteswap_ulong(tmp);
+		//
+		result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+		assert(result == 4);
+		uint32_t unk1 = tmp;
+		uint32_t unk1_be = _byteswap_ulong(tmp);
+		//
+		result = fread_s(&tmp, sizeof(uint32_t), 1, 4, pFile);
+		assert(result == 4);
+		uint32_t unk2 = tmp;
+		uint32_t unk2_be = _byteswap_ulong(tmp);
+		//
+		assert(_byteswap_ulong(tmp) == pVertexCounters[i]-1);
+	}
+}
+
+void doFile(const char* pFilename)
+{
+	FILE* pFile;
+	errno_t err = fopen_s(&pFile, pFilename, "rb");
+	if(!pFile) return;
+	//
+	fseek(pFile , 0 , SEEK_END);
+	uint32_t fileSize = ftell(pFile);
+	rewind(pFile);
+	//
+	uint32_t tmp;
+	const uint32_t kMagic = 0x424D4C1b;
+	size_t result;
+	result = fread_s(&tmp, sizeof(tmp), 1, sizeof(tmp), pFile);
+	assert(result == 4);
+	assert(tmp == kMagic);	
+	//
+	result = fread_s(&tmp, sizeof(tmp), 1, sizeof(tmp), pFile);
+	assert(result == 4);
+	int32_t unknown0 = tmp;
+	bool isWorldModel = (unknown0 == 0);
+	//
+	result = fread_s(&tmp, sizeof(tmp), 1, sizeof(tmp), pFile);
+	assert(result == 4);
+	int32_t numRecords = _byteswap_ulong(tmp);
+	//
+	std::vector&lt;uint32_t&gt; vertexCounters;
+	vertexCounters.resize(numRecords);
+	//
+	for(int32_t i = 0; i &lt; numRecords; i++) {
+		doRecord(pFile, (i != 0), &vertexCounters[i], isWorldModel);
+	}
+	//
+	doFooter(pFile, (isWorldModel ? 0 : numRecords), vertexCounters.data());
+	//
+	fclose(pFile);
+}
+</pre>
+<center><img src="../images/doom_skull.jpg" alt="demon skull" title="" /></center>
+<p>glhf =D</p>
+</div>
+</body>
+</html>
