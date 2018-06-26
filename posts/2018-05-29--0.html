@@ -2,7 +2,7 @@
 <body>
 <div class="page">
 <h2>2018-05-29 - Adding texturing to a glsl path tracer</h2>
-<a href="../index.html">Top</a>
+<a href="../index.html">Index</a>
 <p>So, since I haven't seen any other writeups covering the subject of adding texturing to an OpenGL ray-tracer/path-tracer (they all seem to stop just short of that step, or go into procedural texturing) I figured I might as well blog about the approach I used for the path-traced viewmode in Sunrise (my work-in-progress brush based map editor, video <a href="https://www.youtube.com/watch?v=IA0WcpM_qX8">here</a>).</p>
 <center><img src="../images/sunrise1.jpg" alt="sunrise" title="" /></center>
 <p>If you're used to working with the traditional real-time graphics pipeline then you're probably used to shaders having a relatively small set of texture inputs passed in as uniform variables that are change on a per-object basis while drawing the scene, which of course works out fine when things are all being draw one triangle at a time and need no information about the other parts of the scene. When path tracing however we need to know about all the triangles (or other primitives, in Sunrise they're convex polyhedrons) so that when a ray intersects an object we will have information about the surface color, roughness, metallness, normals, etc. Luckily this turns out to be quite easy to do, though it requires a OpenGL extension to do it the way I have chosen to implement it, specifically <code>GL_ARB_bindless_texture</code>.</p>
