@@ -1,0 +1,208 @@
+<html><head><link rel="stylesheet" href="../style.css"></head>
+<body>
+<div class="page">
+<h2>Sunrise</h2>
+<a href="../index.html">Index</a>
+<h3>Overview</h3>
+<p>
+Sunrise is a 3D brush-based map editor designed for creating levels for closed world style game engines such as Source and idTech. Levels are constructed primarily out of convex polyhedral brushes and compiled using an integrated map compiler that performs brush clipping, hidden surface removal and construction of spatial acceleration structures such as BSPs and BVHs to produce an optimized map. The current focus is on providing an intuitive and fluid interface for fast creation and iteration of basic, coarse-grained map geometry, however, in future versions I aim to support a wider set of geometry primitives such as curves, displacements, voxels and meshes as well as other features such as procedural meshes and procedural prefabs, and more map compilation features such as lightmap, lightprobe and reflection probe generation.
+</p>
+<p>A video demonstration of some of it's current features is available <a href="https://www.youtube.com/watch?v=IA0WcpM_qX8">here</a>.</p>
+<center><img src="../images/sunrise1.jpg" alt="sunrise" title="" /></center>
+<p>Blog post about adding texturing to the path-traced viewmode <a href="../posts/2018-05-29--0.html">here</a>.</p>
+<h3>Brush Editing</h3>
+<center><img src="../images/brush.jpg" alt="brush editing" title="" /></center>
+<pre>
+-left click and drag to create brushes
+-hold 'shift' and click+drag to extrude faces
+-press 'v' to enter/exit vertex edit mode
+-hold 'alt' for vertical movement
+-'j'/'k' to rotate brushes
+-'backspace' to delete
+-'space' to duplicate
+</pre>
+<h3>Multiple Viewmodes</h3>
+<center><img src="../images/viewmodes.jpg" alt="viewmodes" title="" /></center>
+<pre>
+-Shaded (PBR)
+-Base Color
+-Normals
+-Ambient Occlusion
+-Metallic
+-Roughness
+-Wireframe
+-Path Traced
+</pre>
+<h3>Console and GUI</h3>
+<center><img src="../images/console.jpg" alt="console" title="" /></center>
+<pre>
+-heads up display
+-drop down console
+-colored text
+-tab completion
+-usage hints
+</pre>
+<h3>Integrated map compiler</h3>
+<center><img src="../images/compiler.jpg" alt="compiler" title="" /></center>
+<pre>
+-brush clipping
+-conservative face splitting
+-TJunction fixups
+-BSP generation
+-intersection/collision testing
+-partial hidden surface removal
+-cluster portal generation
+-vertex merging
+</pre>
+<h3>Current Features</h3>
+<p>As of 2018-07-02:</p>
+<pre>
+-first person view and intuitive control scheme
+	-'wasd' movement controls
+	-mouse based selection & interaction
+	-smooth camera movement
+	-extruded selection volumes for back-facing surfaces
+	-distance and angle snapping
+	-'always valid' modelling philosophy
+	-fullscreen suitable, task-focused UI/workflow
+	-heads up display
+	-3D lines/guides for aligning brushes and entities
+	-parameter space coordinate grid lines
+-brush manipulation
+	-create
+	-delete
+	-duplicate
+	-move
+	-rotate
+	-vertex move
+	-face extrude
+	-automatic face & edge splitting/merging & vertex merging
+-materials/texturing
+	-select material
+	-apply material to brush
+	-apply material to face
+	-copy material from face
+	-simple text-based material file format
+	-loaded on-demand
+	-metal/roughness PBR workflow
+-entities
+	-select
+	-create
+	-move
+	-delete
+	-rotate
+-advanced anti-aliasing
+	-SSAA
+	-renderscale with gaussian downsampling
+	-anisotropic texture filtering & mip biasing
+	-distance field anti-aliased points and lines
+	-distance field anti-aliased texture coordinate grid
+	-ray jittered anti-aliasing for path traced viewmode
+-drop down console
+	-command history
+	-autocomplete
+	-usage hints
+	-colored text
+	-vertical scrolling
+-integrated map compiler
+	-brush clipping
+	-vertex merging
+	-BSP generation
+	-TJunction fixups
+-multiple viewmodes
+	-shaded (PBR)
+	-basecolor/albedo
+	-normals (view space)
+	-ambient occlusion
+	-metallic/metalness
+	-roughness
+	-wireframe
+	-path traced
+</pre>
+<h3>Planned, Possible, or In-Progress Features</h3>
+<p>As of 2018-07-02:</p>
+<pre>
+-new contextual tools/editors
+	-material browser
+	-material editor
+	-proceduralism
+		-procedural meshes
+		-procedural prefabs
+		-procedure editor
+		-procedural textures
+	-entity editor
+	-uv editor
+	-material transform controls
+	-add splines and curved surfaces
+	-add voxels/voxel editor
+	-add displacements/terrain patches
+	-decals
+	-add light placement/editing
+	-mesh loading and placement
+-basic tool improvements
+	-face edit mode
+	-edge edit mode
+	-multi select
+	-undo/redo
+	-clip tool
+	-brush merge (convex minimum/maximum)
+	-add brush/surface variable system
+	-add 3D text overlays for displaying dimensions, etc.
+-settings
+	-settings menu
+	-config file
+	-adjustable control bindings
+-console/gui improvements
+	-copy paste support
+	-mouse based text selection
+-vulkan backend renderer
+	-vertex pulling
+	-more flexible post-processing
+	-film grain, flares, bloom, halation, etc.
+	-blue noise dithering
+	-color grading
+	-add zprime to renderer
+	-occlusion culling
+	-roughness biasing to reduce specular aliasing
+	-order independant transparency
+	-add host/device memory usage tracking
+	-improve material texture loading system to merge texture maps to improve efficiency
+	-screenspace reflections
+	-ray traced reflections
+-improvements to materials
+	-improved mipmap generation
+	-anisotropic rougness
+	-layered BRDF
+	-sky materials
+	-emission
+	-parallax occlusion mapping
+	-virtual texturing
+	-multipass materials
+-system improvements
+	-image based lighting and reflection probes
+	-add profiling
+	-add system memory usage tracking
+	-improve map compiler with use of better data structures
+	-persistency based editing to replace load/save, instead use checkin/checkout
+	-add 'reproducability system' that logs brushes/operations that cause invalid results so they can be debugged.
+-improve path tracer
+	-add multiple-importance-sampling and next-event-estimation to path tracer
+	-add denoising to path tracer
+	-make path-traced viewmode support guide overlays
+	-dynamic decimation ratio to reduce renderload when rendering slowly
+	-framerate targetting
+	-convolution pass to figure out where more rays are needed (gradient domain raytracing)
+	-ray reordering/breadth first ray tracing
+	-triangle support for meshes
+	-sub BVH's for instanced meshes
+	-blue noise sampling
+-add real-time lightmapping view using path tracer
+	-spherical gaussian lightmaps
+	-spherical gaussian probes for dynamic objects
+	-assign lightmap pages to visible brush surfaces
+	-use path tracing to compute lightmap pages
+	-use dynamic lights, lightmaps, lightprobes, reflection probes, etc. so matching final output
+</pre>
+</div>
+</body>
+</html>

@@ -2,6 +2,7 @@ body { background-color:#000810; color:#2080FF; font-family: 'IBM Plex Sans', 'H
 .page { background-color:#000408; border:2px solid #2080FF; padding:0em 2ch; }
 h1 {color: #8000FF}
 h2 {color: #8000FF}
+h3 {color: #8000FF}
 code {color: #008040}
 pre {color: #008040; font-family: 'IBM Plex Mono', 'Menlo', 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', Courier, monospace}
 a {color: #008080}
