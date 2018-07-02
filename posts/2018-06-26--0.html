@@ -6,7 +6,7 @@
 <p>
 Recently I set out to build a map viewer for DOOM (2016) and as many of the file formats involved are proprietary formats unique to idTech6 I thought it would be a good idea to document whatever I can figure out about them as I go to avoid as much duplicated effort as possibly for anyone else attempting something similar in future.
 </p>
-<center><img src="../images/bfg_division1.jpg" alt="sunrise" title="" /></center>
+<img src="../images/bfg_division1.jpg" alt="sunrise" title="" />
 <p>
 The first step was to extract the files from the .resource files that idTech6 uses to package it's data, for this I used an existing open source tool called DOOMExtract (available on GitHub <a href="https://github.com/emoose/DOOMExtract">here</a>). After taking a look at the files inside I immediately noticed some similarities to early idTech games such as Doom 3, such as the existance of <code>.proc</code> files which Doom 3 used for 'pre-processed map geometry'.
 </p>
@@ -106,7 +106,7 @@ II II II II - index count, big endian.
 <p>
 Next up we have the vertices, followed by the indices, to know where each starts and finishes we need to know how big they are though.
 </p>
-<center><img src="../images/renderdoc.png" alt="RenderDoc" title="" /></center>
+<img src="../images/renderdoc.png" alt="RenderDoc" title="" />
 <p>Thanks RenderDoc!</p>
 <p>
 Luckily for us <code>.bmodel</code> seems to keep things simple by storing vertices in the same format (other than the fact that the floats are big-endian in the file) in which they're used for rendering. If you look at the files in a hex editor the repeating patterns are also a pretty good give away that the vertex stride is indeed 48 bytes thanks to some of the values (particularly the 'color' value) being quite consistent. I haven't yet figured out what all the values in the vertex format are used for, but the basic structure I'm using to interpret it is this:
@@ -127,7 +127,7 @@ struct Vertex
 <p>
 The meaning of <code>position</code>, <code>normal</code> & <code>tangent</code> are exactly what you'd expect, as for <code>color</code>, I named it that based on that seeming to be what id Software has called it, but as far as I can tell it's not actually color, afterall, why would a megatextured game need vertex tinting anyway? In the Doom 3 source code they use <code>color</code> and <code>color2</code> as names for the bone weight values used for skinning stored inside each <code>idDrawVert</code> so perhaps this is something similar, though I thought this was a static mesh format so I'm not sure what use they'd be here, and <code>color</code> does seem to sometimes have different values, though it's mostly set to <code>FF FF FF FF</code>. As for <code>texcoord2</code>, my best guess is that this is the texture coordinates for lightmaps since it would make sense to have a separate value for that as it's often useful to lay lightmaps out with more uniform texel density as these coordinates seem to be. It's also worth noting that the <code>texcoord2</code> values extend well beyond the 0 to 1 range where as the <code>texcoord</code> values seem to spread that 0->1 unit square of texture coordinates accross the entire level(with the exception of non-megatextured surfaces, such as glass), so prehaps the lightmaps are still using more of a texture atlassing type of scheme and that is being reflected in the texcoord ranges. As for <code>unk0</code> and <code>unk1</code>, I haven't yet figured out the meanings of these values so I've just left them labelled as unknown for now (though <code>unk0[0]</code> seems to a mask denoting which vertexes are not utilizing megatextures, eg. glass, flames, skyboxes, etc.).
 </p>
-<center><img src="../images/texcoord_comparison2.jpg" alt="texcoord comparison" title="" /></center>
+<img src="../images/texcoord_comparison2.jpg" alt="texcoord comparison" title="" />
 <p>Above: Visualization of texture coordinates, on the left is texcoord, on the right is texcoord2.</p>
 <p>The indices follow immediately after the end of the vertices, 2-bytes per index, big-endian once again.</p>
 <p>After the indices is some extra data about the mesh, 28-bytes worth, big-endian<p>
@@ -460,7 +460,7 @@ void doFile(const char* pFilename)
 	fclose(pFile);
 }
 </pre>
-<center><img src="../images/doom_skull.jpg" alt="demon skull" title="" /></center>
+<img src="../images/doom_skull.jpg" alt="demon skull" title="" />
 <p>glhf =D</p>
 </div>
 </body>

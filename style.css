@@ -7,3 +7,4 @@ code {color: #008040}
 pre {color: #008040; font-family: 'IBM Plex Mono', 'Menlo', 'DejaVu Sans Mono', 'Bitstream Vera Sans Mono', Courier, monospace}
 a {color: #008080}
 ul { padding-left:0; list-style-type:none; }
+img { display: block; margin-left: auto; margin-right: auto; }
